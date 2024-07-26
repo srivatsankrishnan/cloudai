@@ -46,7 +46,7 @@ class JaxToolboxSlurmCommandGenStrategy(SlurmCommandGenStrategy):
         final_cmd_args["output_path"] = output_path
 
         self.test_name = self._extract_test_name(cmd_args)
-
+        print(self.test_name)
         if self.test_name == "GPT":
             # Define the keys to check for the GPT test
             gpt_keys = [
@@ -87,6 +87,7 @@ class JaxToolboxSlurmCommandGenStrategy(SlurmCommandGenStrategy):
         return self._write_sbatch_script(slurm_args, env_vars_str, srun_command, output_path)
 
     def _extract_test_name(self, cmd_args: Dict[str, Any]) -> str:
+        print(cmd_args)
         test_name = ""
         for key in cmd_args:
             if "." in key:
@@ -185,8 +186,10 @@ class JaxToolboxSlurmCommandGenStrategy(SlurmCommandGenStrategy):
         base_args.update({"image_path": image_path, "container_mounts": container_mounts})
 
         output_path = os.path.abspath(cmd_args["output_path"])
-        base_args["output"] = os.path.join(output_path, "output-%j-%n-%t.txt")
-        base_args["error"] = os.path.join(output_path, "error-%j-%n-%t.txt")
+
+        output_suffix = "-%j.txt" if env_vars.get("UNIFIED_STDOUT_STDERR") == "1" else "-%j-%n-%t.txt"
+        base_args["output"] = os.path.join(output_path, f"output{output_suffix}")
+        base_args["error"] = os.path.join(output_path, f"error{output_suffix}")
 
         return base_args
 
@@ -194,18 +197,21 @@ class JaxToolboxSlurmCommandGenStrategy(SlurmCommandGenStrategy):
         self, slurm_args: Dict[str, Any], env_vars: Dict[str, str], cmd_args: Dict[str, str], extra_cmd_args: str
     ) -> str:
         self._create_run_script(slurm_args, env_vars, cmd_args, extra_cmd_args)
-
+        print(env_vars)
         srun_command_parts = [
             "srun",
             f"--mpi={self.slurm_system.mpi}",
-            f"{self.slurm_system.extra_srun_args if self.slurm_system.extra_srun_args else ''}",
+            self.slurm_system.extra_srun_args or "",
             "--export=ALL",
+            "--unbuffered" if env_vars.get("BUFFERED_IO") == "0" else "",
             f"-o {slurm_args['output']}",
             f"-e {slurm_args['error']}",
             f"--container-image={slurm_args['image_path']}",
             f"--container-mounts={slurm_args['container_mounts']}",
             "/opt/paxml/workspace/run.sh",
         ]
+        # Filter out any empty strings from the list
+        srun_command_parts = [part for part in srun_command_parts if part]
 
         return " \\\n".join(srun_command_parts)
 
