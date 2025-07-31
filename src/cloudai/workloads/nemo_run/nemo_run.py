@@ -72,6 +72,9 @@ class TrainerStrategy(BaseModel):
     pipeline_model_parallel_size: Union[int, List[int]] = 1
     context_parallel_size: Union[int, List[int]] = 2
     virtual_pipeline_model_parallel_size: Optional[Union[int, List[int]]] = None
+    nccl_communicator_config_path: Optional[str] = None
+    nccl_communicator_config_dp: Optional[Union[int, List[int]]] = None
+    nccl_communicator_config_dp_cp: Optional[Union[int, List[int]]] = None
 
 
 class Trainer(BaseModel):
@@ -150,6 +153,8 @@ class NeMoRunTestDefinition(TestDefinition):
         pp = cast(int, self.cmd_args.trainer.strategy.pipeline_model_parallel_size)
         cp = cast(int, self.cmd_args.trainer.strategy.context_parallel_size)
         vp = cast(Optional[int], self.cmd_args.trainer.strategy.virtual_pipeline_model_parallel_size)
+        nccl_dp = self.cmd_args.trainer.strategy.nccl_communicator_config_dp
+        nccl_dp_cp = self.cmd_args.trainer.strategy.nccl_communicator_config_dp_cp
         num_gpus = tr.nnodes * 8
         num_layers = cast(int, self.cmd_args.num_layers)
         dp = num_gpus // (tp * pp * cp)
@@ -180,7 +185,14 @@ class NeMoRunTestDefinition(TestDefinition):
         if not constraint4:
             logging.error(f"Constraint 4 failed: gbs %% (mbs * dp) != 0. Values: gbs={gbs}, mbs={mbs}, dp={dp}")
 
-        return constraint1 and constraint2 and constraint3 and constraint4
+        constraint5 = nccl_dp == nccl_dp_cp
+        if not constraint5:
+            logging.error(
+                "Constraint 5 failed: nccl_communicator_config_dp and nccl_communicator_config_dp_cp must have the same values. "
+                f"Values: nccl_communicator_config_dp={nccl_dp}, nccl_communicator_config_dp_cp={nccl_dp_cp}"
+            )
+
+        return constraint1 and constraint2 and constraint3 and constraint4 and constraint5
 
     @property
     def update_num_train_samples(self) -> Optional[int]:
