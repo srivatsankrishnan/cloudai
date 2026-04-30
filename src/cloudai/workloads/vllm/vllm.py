@@ -45,6 +45,32 @@ class VllmArgs(LLMServingArgs):
         description="Set ``kv_connector_extra_config.num_threads`` for ``--kv-transfer-config`` CLI argument.",
     )
 
+    trust_remote_code: Optional[bool] = Field(
+        default=None, description="Enable loading custom model code from HuggingFace."
+    )
+    reasoning_parser: Optional[str] = Field(
+        default=None, description="Reasoning parser for structured output (e.g. nemotron_v3)."
+    )
+    enable_chunked_prefill: Optional[bool] = Field(
+        default=None, description="Enable chunked prefill for long-context inputs."
+    )
+    max_model_len: Optional[int] = Field(default=None, description="Maximum model context length in tokens.")
+    max_num_seqs: Optional[int] = Field(default=None, description="Maximum number of sequences per iteration.")
+    gpu_memory_utilization: Optional[float] = Field(
+        default=None, description="Fraction of GPU memory to use for the KV cache (0.0 to 1.0)."
+    )
+    enable_prefix_caching: Optional[bool] = Field(
+        default=None, description="Enable automatic prefix caching for repeated prompts."
+    )
+    kv_cache_dtype: Optional[str] = Field(default=None, description="Data type for KV cache storage (e.g. fp8, auto).")
+    enforce_eager: Optional[bool] = Field(
+        default=None, description="Disable CUDA graph compilation, use eager execution."
+    )
+    video_pruning_rate: Optional[float] = Field(default=None, description="EVS video token pruning rate (0.0 to 0.75).")
+    media_io_kwargs: Optional[str] = Field(
+        default=None, description="JSON string of media I/O config (e.g. video FPS)."
+    )
+
     @property
     def serve_args_exclude(self) -> set[str]:
         return super().serve_args_exclude | {"nixl_threads"}
