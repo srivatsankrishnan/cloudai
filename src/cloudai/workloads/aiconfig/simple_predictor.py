@@ -87,6 +87,10 @@ def parse_args() -> argparse.Namespace:
         help="Acceptance rates for nextn speculative decoding (space-separated floats). Required when --nextn > 0.",
     )
 
+    # multimodal encoder params (0 = text-only)
+    parser.add_argument("--num-video-frames", default=0, type=int)
+    parser.add_argument("--video-pruning-rate", default=0.0, type=float)
+
     return parser.parse_args()
 
 
@@ -117,6 +121,8 @@ def _run_agg(ns: argparse.Namespace) -> dict:
         comm_quant_mode=ns.comm_quant_mode,
         nextn=ns.nextn,
         nextn_accept_rates=ns.nextn_accept_rates,
+        num_video_frames=ns.num_video_frames,
+        video_pruning_rate=ns.video_pruning_rate,
     )
 
 
@@ -154,6 +160,8 @@ def _run_disagg(ns: argparse.Namespace) -> dict:
         nextn_accept_rates=ns.nextn_accept_rates,
         prefill_correction_scale=ns.prefill_correction_scale,
         decode_correction_scale=ns.decode_correction_scale,
+        num_video_frames=ns.num_video_frames,
+        video_pruning_rate=ns.video_pruning_rate,
     )
 
 

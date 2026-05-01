@@ -71,6 +71,10 @@ class AiconfiguratorCmdArgs(CmdArgs):
     isl: Union[int, List[int]]
     osl: Union[int, List[int]]
 
+    # Multimodal encoder params (0 = text-only, no encoder overhead)
+    num_video_frames: Union[int, List[int]] = 0
+    video_pruning_rate: Union[float, List[float]] = 0.0
+
     agg: Optional[Agg] = None
     disagg: Optional[Disagg] = None
 

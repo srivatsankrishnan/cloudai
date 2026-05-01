@@ -66,6 +66,7 @@ class _RunnerBackend:
         self._original_test_run = copy.deepcopy(test_run)
         self._runner = runner
         self._trajectory_cache: dict[int, list[TrajectoryEntry]] = {}
+        self._load_trajectory_cache()
 
     @property
     def test_run(self) -> TestRun:
@@ -148,6 +149,54 @@ class _RunnerBackend:
                 return entry
         return None
 
+    def get_all_entries(self) -> list[TrajectoryEntry]:
+        """Return all cached trajectory entries across iterations."""
+        return [e for entries in self._trajectory_cache.values() for e in entries]
+
+    def _load_trajectory_cache(self) -> None:
+        """Pre-load trajectory.csv files from previous runs into the cache."""
+        import ast
+
+        scenario_root = getattr(self._runner, "scenario_root", None)
+        if not isinstance(scenario_root, Path):
+            return
+
+        tr_name = self._test_run.name
+        tr_dir = scenario_root / tr_name
+        if not tr_dir.is_dir():
+            return
+
+        loaded = 0
+        for iteration_dir in sorted(tr_dir.iterdir()):
+            if not iteration_dir.is_dir():
+                continue
+            traj_file = iteration_dir / "trajectory.csv"
+            if not traj_file.is_file():
+                continue
+            try:
+                iteration = int(iteration_dir.name)
+            except ValueError:
+                continue
+
+            with open(traj_file, newline="") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    try:
+                        entry = TrajectoryEntry(
+                            step=int(row["step"]),
+                            action=ast.literal_eval(row["action"]),
+                            reward=float(row["reward"]),
+                            observation=ast.literal_eval(row["observation"]),
+                            info=ast.literal_eval(row.get("info", "{}")),
+                        )
+                        self._trajectory_cache.setdefault(iteration, []).append(entry)
+                        loaded += 1
+                    except (ValueError, SyntaxError) as exc:
+                        logging.debug("Skipping malformed trajectory row in %s: %s", traj_file, exc)
+
+        if loaded:
+            logging.info("Pre-loaded %d trajectory entries from %s", loaded, tr_dir)
+
 
 class _GymServerBackend:
     """Backend that delegates to an in-process GymServer for fast, stateful interaction."""
@@ -191,6 +240,7 @@ def _create_gym_server(test_run: TestRun) -> Any:
     server_cls = getattr(module, class_name)
 
     import inspect
+
     sig = inspect.signature(server_cls.__init__)
     valid_params = set(sig.parameters.keys()) - {"self"}
     if valid_params and not any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
@@ -339,10 +389,55 @@ class CloudAIGymEnv(BaseGym):
         return self._trajectory_by_iteration.setdefault(self.test_run.current_iteration, [])
 
     def get_cached_trajectory_result(self, action: Any) -> Optional[TrajectoryEntry]:
+        """Return a cached entry matching the given action in the current iteration, or None."""
         for entry in self.current_trajectory:
             if _values_match_exact(entry.action, action):
                 return entry
         return None
+
+    def get_all_trajectory_entries(self) -> list[TrajectoryEntry]:
+        """Return all trajectory entries (pre-loaded + current session + explicitly loaded).
+
+        Useful for offline RL agents that train on historical data.
+        """
+        entries = list(self._trajectory)
+        if isinstance(self._backend, _RunnerBackend):
+            backend_entries = self._backend.get_all_entries()
+            seen = {id(e) for e in entries}
+            entries.extend(e for e in backend_entries if id(e) not in seen)
+        return entries
+
+    def load_trajectory_files(self, paths: list[Path]) -> int:
+        """Load additional trajectory.csv files into the cache.
+
+        Returns the number of entries loaded.
+        """
+        import ast
+
+        loaded = 0
+        for traj_file in paths:
+            traj_path = Path(traj_file)
+            if not traj_path.is_file():
+                logging.warning("Trajectory file not found: %s", traj_path)
+                continue
+            with open(traj_path, newline="") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    try:
+                        entry = TrajectoryEntry(
+                            step=int(row["step"]),
+                            action=ast.literal_eval(row["action"]),
+                            reward=float(row["reward"]),
+                            observation=ast.literal_eval(row["observation"]),
+                            info=ast.literal_eval(row.get("info", "{}")),
+                        )
+                        self._trajectory.append(entry)
+                        loaded += 1
+                    except (ValueError, SyntaxError) as exc:
+                        logging.debug("Skipping malformed row in %s: %s", traj_path, exc)
+        if loaded:
+            logging.info("Loaded %d trajectory entries from %d file(s)", loaded, len(paths))
+        return loaded
 
 
 def _values_match_exact(left: Any, right: Any) -> bool:

@@ -73,6 +73,9 @@ def predict_ifb_single(
     nextn_accept_rates: Optional[list[float]] = None,
     # advanced model options
     overwrite_num_layers: int = 0,
+    # multimodal encoder params (0 = text-only, no overhead)
+    num_video_frames: int = 0,
+    video_pruning_rate: float = 0.0,
 ) -> Dict[str, Any]:
     """Predict metrics for a single IFB configuration using the aiconfigurator SDK primitives."""
     database = aic_perf_database.get_database(system=system, backend=backend, version=version)
@@ -99,7 +102,10 @@ def predict_ifb_single(
     )
     model = aic_models.get_model(model_name, mc, backend)
 
-    rc = aic_config.RuntimeConfig(batch_size=batch_size, isl=isl, osl=osl)
+    rc = aic_config.RuntimeConfig(
+        batch_size=batch_size, isl=isl, osl=osl,
+        num_video_frames=num_video_frames, video_pruning_rate=video_pruning_rate,
+    )
     summary = backend_impl.run_ifb(model=model, database=database, runtime_config=rc, ctx_tokens=ctx_tokens)
     df = summary.get_summary_df()
     if df is None or df.empty:
@@ -159,6 +165,9 @@ def predict_disagg_single(
     # correction scales
     prefill_correction_scale: float = 1.0,
     decode_correction_scale: float = 1.0,
+    # multimodal encoder params (0 = text-only, no overhead)
+    num_video_frames: int = 0,
+    video_pruning_rate: float = 0.0,
 ) -> Dict[str, Any]:
     """Predict metrics for a single disaggregated configuration (explicit prefill/decode workers)."""
     perf_db = aic_perf_database.get_database(system=system, backend=backend, version=version)
@@ -200,7 +209,10 @@ def predict_disagg_single(
         overwrite_num_layers=overwrite_num_layers,
     )
 
-    rc_prefill = aic_config.RuntimeConfig(batch_size=p_bs, isl=isl, osl=osl)
+    rc_prefill = aic_config.RuntimeConfig(
+        batch_size=p_bs, isl=isl, osl=osl,
+        num_video_frames=num_video_frames, video_pruning_rate=video_pruning_rate,
+    )
     rc_decode = aic_config.RuntimeConfig(batch_size=d_bs, isl=isl, osl=osl)
 
     prefill_model = aic_models.get_model(model_name, p_mc, backend)

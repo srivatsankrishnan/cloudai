@@ -346,3 +346,95 @@ def test_get_cached_trajectory_result(
         assert expected_step is None
     else:
         assert actual.step == expected_step
+
+
+def test_load_trajectory_files_loads_entries(base_tr: TestRun, tmp_path: Path):
+    traj_csv = tmp_path / "trajectory.csv"
+    traj_csv.write_text(
+        "step,action,reward,observation,info\n"
+        "1,\"{'p1': 1, 'p2': 2}\",0.5,\"[1.0, 2.0]\",\"{}\"\n"
+        "2,\"{'p1': 3, 'p2': 4}\",1.5,\"[3.0, 4.0]\",\"{}\"\n"
+    )
+
+    runner = MagicMock()
+    runner.scenario_root = tmp_path / "scenario"
+    runner.system = MagicMock()
+    runner.test_scenario = MagicMock(test_runs=[])
+    runner.jobs = {}
+    runner.testrun_to_job_map = {}
+    runner.get_job_output_path.return_value = tmp_path / "scenario" / base_tr.name / "0" / "7"
+
+    env = CloudAIGymEnv(test_run=base_tr, runner=runner)
+    loaded = env.load_trajectory_files([traj_csv])
+    assert loaded == 2
+
+    entries = env.get_all_trajectory_entries()
+    assert len(entries) >= 2
+    actions = [e.action for e in entries]
+    assert {"p1": 1, "p2": 2} in actions
+    assert {"p1": 3, "p2": 4} in actions
+
+
+def test_load_trajectory_files_missing_file(base_tr: TestRun, tmp_path: Path):
+    runner = MagicMock()
+    runner.scenario_root = tmp_path / "scenario"
+    runner.system = MagicMock()
+    runner.test_scenario = MagicMock(test_runs=[])
+    runner.jobs = {}
+    runner.testrun_to_job_map = {}
+    runner.get_job_output_path.return_value = tmp_path / "scenario" / base_tr.name / "0" / "7"
+
+    env = CloudAIGymEnv(test_run=base_tr, runner=runner)
+    loaded = env.load_trajectory_files([tmp_path / "nonexistent.csv"])
+    assert loaded == 0
+
+
+def test_load_trajectory_files_malformed_rows(base_tr: TestRun, tmp_path: Path):
+    traj_csv = tmp_path / "trajectory.csv"
+    traj_csv.write_text(
+        "step,action,reward,observation,info\n"
+        "1,\"{'p1': 1}\",0.5,\"[1.0]\",\"{}\"\n"
+        "bad_step,\"{'p1': 2}\",0.5,\"[1.0]\",\"{}\"\n"
+        "3,\"not_a_dict\",0.5,\"[1.0]\",\"{}\"\n"
+        "4,\"{'p1': 4}\",1.0,\"[2.0]\",\"{}\"\n"
+    )
+
+    runner = MagicMock()
+    runner.scenario_root = tmp_path / "scenario"
+    runner.system = MagicMock()
+    runner.test_scenario = MagicMock(test_runs=[])
+    runner.jobs = {}
+    runner.testrun_to_job_map = {}
+    runner.get_job_output_path.return_value = tmp_path / "scenario" / base_tr.name / "0" / "7"
+
+    env = CloudAIGymEnv(test_run=base_tr, runner=runner)
+    loaded = env.load_trajectory_files([traj_csv])
+    assert loaded == 2
+
+
+def test_runner_backend_load_trajectory_cache(base_tr: TestRun, tmp_path: Path):
+    scenario_root = tmp_path / "scenario"
+    iteration_dir = scenario_root / base_tr.name / "0"
+    iteration_dir.mkdir(parents=True)
+
+    traj_csv = iteration_dir / "trajectory.csv"
+    traj_csv.write_text(
+        "step,action,reward,observation,info\n"
+        "1,\"{'p1': 10}\",2.0,\"[5.0]\",\"{}\"\n"
+        "2,\"{'p1': 20}\",3.0,\"[6.0]\",\"{}\"\n"
+    )
+
+    runner = MagicMock()
+    runner.scenario_root = scenario_root
+    runner.system = MagicMock()
+    runner.test_scenario = MagicMock(test_runs=[])
+    runner.jobs = {}
+    runner.testrun_to_job_map = {}
+    runner.get_job_output_path.return_value = scenario_root / base_tr.name / "0" / "7"
+
+    env = CloudAIGymEnv(test_run=base_tr, runner=runner)
+    entries = env.get_all_trajectory_entries()
+    assert len(entries) >= 2
+    steps = [e.step for e in entries]
+    assert 1 in steps
+    assert 2 in steps

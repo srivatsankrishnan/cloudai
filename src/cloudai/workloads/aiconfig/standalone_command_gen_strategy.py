@@ -128,6 +128,25 @@ class AiconfiguratorStandaloneCommandGenStrategy(CommandGenStrategy):
                 "Either cmd_args.agg or cmd_args.disagg must be specified for the Aiconfigurator workload."
             )
 
+        sub_args = args.agg if args.agg is not None else args.disagg
+        _QUANT_FIELDS = {
+            "gemm_quant_mode": "--gemm-quant-mode",
+            "moe_quant_mode": "--moe-quant-mode",
+            "kvcache_quant_mode": "--kvcache-quant-mode",
+            "fmha_quant_mode": "--fmha-quant-mode",
+            "comm_quant_mode": "--comm-quant-mode",
+        }
+        for field, flag in _QUANT_FIELDS.items():
+            val = getattr(sub_args, field, None)
+            if val is not None:
+                cmd.extend([flag, str(val)])
+
+        # Multimodal encoder params
+        if args.num_video_frames and int(args.num_video_frames) > 0:
+            cmd.extend(["--num-video-frames", str(args.num_video_frames)])
+        if args.video_pruning_rate and float(args.video_pruning_rate) > 0:
+            cmd.extend(["--video-pruning-rate", str(args.video_pruning_rate)])
+
         cmd.extend(["--output", str(report_json)])
 
         cmd_str = " ".join(shlex.quote(str(x)) for x in cmd)
